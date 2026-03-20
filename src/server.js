@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { buildWeeklyPlan } from './core.js';
-import { createEvent, getSetting, listEvents, setSetting } from './db.js';
+import { consumeQuota, createEvent, getBillingSummary, getSetting, listEvents, setSetting } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -147,16 +147,37 @@ app.put('/api/settings', (req, res) => {
   res.json({ settings: payload });
 });
 
+app.get('/api/billing/summary', (_req, res) => {
+  res.json(getBillingSummary());
+});
+
+app.post('/api/quota/consume', (req, res) => {
+  const { action = 'manual', units = 1, detail = {} } = req.body || {};
+  const result = consumeQuota(String(action), Number(units), detail);
+  if (!result.ok) {
+    return res.status(402).json({ error: result.message, ...result });
+  }
+  return res.json(result);
+});
+
 app.post('/api/hotspots', (req, res) => {
   const { topics, platform = 'douyin', date, weight = 0.8, tags = ['hot'] } = req.body || {};
   if (!Array.isArray(topics) || topics.length === 0) {
     return res.status(400).json({ error: 'topics 必须是非空数组' });
   }
 
+  const validTopics = topics.filter(Boolean);
+  const quota = consumeQuota('hotspot_import', validTopics.length, {
+    platform: String(platform).toLowerCase(),
+    topicsCount: validTopics.length,
+  });
+  if (!quota.ok) {
+    return res.status(402).json({ error: quota.message, billing: quota });
+  }
+
   const targetDate = date || new Date().toISOString().slice(0, 10);
   const created = [];
-  for (const t of topics) {
-    if (!t) continue;
+  for (const t of validTopics) {
     const ev = createEvent({
       title: String(t),
       platform: String(platform).toLowerCase(),
@@ -169,7 +190,7 @@ app.post('/api/hotspots', (req, res) => {
     created.push(ev);
   }
 
-  res.status(201).json({ createdCount: created.length, events: created });
+  res.status(201).json({ createdCount: created.length, events: created, billing: quota });
 });
 
 app.get('/api/export', (req, res) => {
@@ -185,6 +206,11 @@ app.get('/api/export', (req, res) => {
     hours: settings.hours,
     limitPerDay: effectiveLimitPerDay,
   });
+
+  const quota = consumeQuota('plan_export', suggestions.length, { format, days, rows: suggestions.length });
+  if (!quota.ok) {
+    return res.status(402).json({ error: quota.message, billing: quota });
+  }
 
   if (format === 'md') {
     const lines = ['# 发布计划', '', `生成时间: ${new Date().toISOString()}`, ''];
