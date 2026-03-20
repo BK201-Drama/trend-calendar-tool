@@ -23,7 +23,7 @@ function toDisplayPlatform(platform) {
   return map[String(platform).toLowerCase()] || platform;
 }
 
-function formatPlan(days, suggestions) {
+function formatPlan(days, suggestions, strategy = 'balanced') {
   const byDay = new Map();
   for (let i = 0; i < days; i += 1) {
     const d = new Date();
@@ -38,13 +38,17 @@ function formatPlan(days, suggestions) {
 
   for (const s of suggestions) {
     if (!byDay.has(s.date)) continue;
-    byDay.get(s.date).items.push({
+    const item = {
       platform: toDisplayPlatform(s.platform),
       topic: s.title,
       suggestedTime: `${String(s.hour).padStart(2, '0')}:00`,
       date: s.date,
       score: s.score,
       eventId: s.eventId,
+    };
+    byDay.get(s.date).items.push({
+      ...item,
+      reason: buildReason(item, strategy),
     });
   }
 
@@ -59,26 +63,51 @@ const DEFAULT_SETTINGS = {
   platforms: ['douyin', 'xiaohongshu', 'bilibili', 'wechat'],
   hours: [10, 12, 18, 20],
   limitPerDay: 4,
+  strategy: 'balanced',
 };
+
+function getStrategy(settings) {
+  const strategy = String(settings?.strategy || 'balanced').toLowerCase();
+  return ['balanced', 'conservative', 'aggressive'].includes(strategy) ? strategy : 'balanced';
+}
+
+function getEffectiveLimit(limitPerDay, strategy) {
+  if (strategy === 'conservative') return Math.max(1, Math.floor(limitPerDay * 0.75));
+  if (strategy === 'aggressive') return Math.max(1, Math.ceil(limitPerDay * 1.25));
+  return limitPerDay;
+}
+
+function buildReason(item, strategy) {
+  const scoreHint = item.score >= 80 ? '热度高' : item.score >= 60 ? '热度中等' : '可尝试测试';
+  const timeHint = Number(item.suggestedTime?.slice(0, 2)) >= 18 ? '晚间活跃时段' : '白天稳定时段';
+  const strategyHint = strategy === 'conservative'
+    ? '稳健策略，优先更确定的发布时间'
+    : strategy === 'aggressive'
+      ? '激进策略，增加覆盖争取曝光'
+      : '均衡策略，兼顾稳定与增长';
+  return `${scoreHint}｜${timeHint}｜${strategyHint}`;
+}
 
 app.get('/api/plan', (req, res) => {
   const days = Number(req.query.days) > 0 ? Number(req.query.days) : 7;
   const userSettings = getSetting('plan_settings', DEFAULT_SETTINGS) || DEFAULT_SETTINGS;
   const settings = { ...DEFAULT_SETTINGS, ...userSettings };
+  const strategy = getStrategy(settings);
+  const effectiveLimitPerDay = getEffectiveLimit(settings.limitPerDay, strategy);
 
   const events = listEvents();
   const suggestions = buildWeeklyPlan(events, {
     days,
     platforms: settings.platforms,
     hours: settings.hours,
-    limitPerDay: settings.limitPerDay,
+    limitPerDay: effectiveLimitPerDay,
   });
 
   res.json({
     days,
     generatedAt: new Date().toISOString(),
-    settings,
-    plan: formatPlan(days, suggestions),
+    settings: { ...settings, strategy, effectiveLimitPerDay },
+    plan: formatPlan(days, suggestions, strategy),
   });
 });
 
@@ -110,6 +139,9 @@ app.put('/api/settings', (req, res) => {
       ? body.hours.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x >= 0 && x <= 23)
       : DEFAULT_SETTINGS.hours,
     limitPerDay: Number.isFinite(Number(body.limitPerDay)) ? Math.max(1, Number(body.limitPerDay)) : DEFAULT_SETTINGS.limitPerDay,
+    strategy: ['balanced', 'conservative', 'aggressive'].includes(String(body.strategy || '').toLowerCase())
+      ? String(body.strategy).toLowerCase()
+      : DEFAULT_SETTINGS.strategy,
   };
   setSetting('plan_settings', payload);
   res.json({ settings: payload });
@@ -145,11 +177,13 @@ app.get('/api/export', (req, res) => {
   const days = Number(req.query.days) > 0 ? Number(req.query.days) : 7;
   const userSettings = getSetting('plan_settings', DEFAULT_SETTINGS) || DEFAULT_SETTINGS;
   const settings = { ...DEFAULT_SETTINGS, ...userSettings };
+  const strategy = getStrategy(settings);
+  const effectiveLimitPerDay = getEffectiveLimit(settings.limitPerDay, strategy);
   const suggestions = buildWeeklyPlan(listEvents(), {
     days,
     platforms: settings.platforms,
     hours: settings.hours,
-    limitPerDay: settings.limitPerDay,
+    limitPerDay: effectiveLimitPerDay,
   });
 
   if (format === 'md') {

@@ -18,6 +18,12 @@
           <input id="limitPerDay" type="number" min="1" value="4" />
           <label>时段(逗号)</label>
           <input id="hours" value="10,12,18,20" />
+          <label>策略</label>
+          <select id="strategy">
+            <option value="balanced">balanced（均衡）</option>
+            <option value="conservative">conservative（保守）</option>
+            <option value="aggressive">aggressive（激进）</option>
+          </select>
           <button id="saveSettings">保存设置</button>
         </div>
       </section>

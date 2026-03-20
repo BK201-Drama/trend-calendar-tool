@@ -12,3 +12,4 @@ textarea { width: 100%; box-sizing: border-box; margin: 8px 0; }
 .platform-card ul { margin: 0; padding-left: 18px; }
 .platform-card li { margin: 6px 0; }
 .score { color: #6b7280; }
+.reason { color: #4b5563; font-size: 12px; margin-top: 2px; }

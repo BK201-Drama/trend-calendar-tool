@@ -26,7 +26,10 @@ function renderBoard(grouped) {
 
     grouped[platform].forEach((item) => {
       const li = document.createElement('li');
-      li.innerHTML = `<b>${item.date} ${item.suggestedTime}</b> - ${item.topic} <span class="score">(${item.score})</span>`;
+      li.innerHTML = `
+        <div><b>${item.date} ${item.suggestedTime}</b> - ${item.topic} <span class="score">(${item.score})</span></div>
+        <div class="reason">${item.reason || ''}</div>
+      `;
       ul.appendChild(li);
     });
 
@@ -41,6 +44,7 @@ async function loadSettings() {
   const s = data.settings || {};
   document.getElementById('limitPerDay').value = s.limitPerDay || 4;
   document.getElementById('hours').value = (s.hours || [10, 12, 18, 20]).join(',');
+  document.getElementById('strategy').value = s.strategy || 'balanced';
 }
 
 async function loadPlan() {
@@ -55,11 +59,12 @@ async function saveSettings() {
     .split(',')
     .map((x) => Number(x.trim()))
     .filter((x) => Number.isFinite(x));
+  const strategy = document.getElementById('strategy').value || 'balanced';
 
   await fetch('/api/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ limitPerDay, hours }),
+    body: JSON.stringify({ limitPerDay, hours, strategy }),
   });
   await loadPlan();
 }
