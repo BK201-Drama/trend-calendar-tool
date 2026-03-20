@@ -144,4 +144,62 @@ describe('api: supertest', () => {
     expect(String(res.headers['content-type'])).toContain('text/csv');
     expect(res.text.startsWith('date,platform,time,title,score')).toBe(true);
   });
+
+  it('GET /api/billing/summary 返回账单与配额摘要', async () => {
+    const res = await request(BASE_URL).get('/api/billing/summary');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      period: expect.any(String),
+      plan: expect.objectContaining({
+        code: expect.any(String),
+        monthlyQuota: expect.any(Number),
+      }),
+      usage: expect.objectContaining({
+        usedUnits: expect.any(Number),
+        remainingUnits: expect.any(Number),
+        overageUnits: expect.any(Number),
+      }),
+    });
+    expect(res.body.usage.usedUnits).toBeGreaterThanOrEqual(0);
+    expect(res.body.usage.remainingUnits).toBeGreaterThanOrEqual(0);
+  });
+
+  it('POST /api/hotspots 会消耗配额并反映到摘要', async () => {
+    const before = await request(BASE_URL).get('/api/billing/summary');
+    expect(before.status).toBe(200);
+
+    const topics = ['配额消耗测试-A', '配额消耗测试-B'];
+    const consumeRes = await request(BASE_URL).post('/api/hotspots').send({
+      topics,
+      platform: 'douyin',
+    });
+
+    expect(consumeRes.status).toBe(201);
+    expect(consumeRes.body.createdCount).toBe(topics.length);
+    expect(consumeRes.body.billing).toMatchObject({
+      ok: true,
+      consumedUnits: topics.length,
+    });
+
+    const after = await request(BASE_URL).get('/api/billing/summary');
+    expect(after.status).toBe(200);
+    expect(after.body.usage.usedUnits).toBeGreaterThanOrEqual(before.body.usage.usedUnits + topics.length);
+    expect(after.body.usage.remainingUnits).toBeLessThanOrEqual(before.body.usage.remainingUnits - topics.length);
+  });
+
+  it('POST /api/hotspots 超额时应被拦截', async () => {
+    const summary = await request(BASE_URL).get('/api/billing/summary');
+    expect(summary.status).toBe(200);
+
+    const overUnits = Number(summary.body.usage.remainingUnits || 0) + 1;
+    const topics = Array.from({ length: overUnits }, (_, i) => `超额测试-${i + 1}`);
+    const overRes = await request(BASE_URL).post('/api/hotspots').send({
+      topics,
+      platform: 'douyin',
+    });
+
+    expect(overRes.status).toBe(402);
+    expect(overRes.body.error || overRes.body?.billing?.message || '').toMatch(/配额|quota|超额/i);
+  });
 });
