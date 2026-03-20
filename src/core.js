@@ -59,6 +59,33 @@ export const DEFAULT_TAG_BOOST = {
   evergreen: -0.05,
 };
 
+/**
+ * 策略模板：控制评分维度偏好
+ * - balanced: 兼顾权重、平台、时段、标签（默认）
+ * - conservative: 更重平台契合和高峰时段，降低标签波动影响
+ * - aggressive: 更重事件权重和热点标签，放宽平台/时段约束
+ */
+export const STRATEGY_PROFILES = {
+  balanced: {
+    baseWeight: 70,
+    platformWeight: 15,
+    hourWeight: 15,
+    tagWeight: 20,
+  },
+  conservative: {
+    baseWeight: 65,
+    platformWeight: 22,
+    hourWeight: 20,
+    tagWeight: 10,
+  },
+  aggressive: {
+    baseWeight: 78,
+    platformWeight: 12,
+    hourWeight: 10,
+    tagWeight: 30,
+  },
+};
+
 /** 默认候选发布时段 */
 const DEFAULT_HOURS = [8, 10, 12, 14, 17, 18, 19, 20, 21, 22];
 
@@ -100,6 +127,93 @@ function parseDate(input) {
   }
   const d = new Date(input);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** 解析策略配置：支持 strategyProfile 为字符串或覆盖对象 */
+function resolveStrategy(options = {}) {
+  const rawProfile = options.strategyProfile;
+  const profileName = typeof rawProfile === "string" ? rawProfile.toLowerCase() : "balanced";
+  const baseProfile = STRATEGY_PROFILES[profileName] || STRATEGY_PROFILES.balanced;
+
+  if (rawProfile && typeof rawProfile === "object" && !Array.isArray(rawProfile)) {
+    return {
+      ...baseProfile,
+      ...rawProfile,
+    };
+  }
+
+  return baseProfile;
+}
+
+function explainSlot(event, platform, hour, options = {}) {
+  const p = String(platform || "").toLowerCase();
+  const h = clamp(Math.floor(Number(hour) || 0), 0, 23);
+
+  const platformHourWeights = options.platformHourWeights || DEFAULT_PLATFORM_HOUR_WEIGHTS;
+  const tagBoost = options.tagBoost || DEFAULT_TAG_BOOST;
+  const strategy = resolveStrategy(options);
+
+  const weightValue = clamp(Number(event?.weight ?? 0.5), 0, 1);
+  const base = weightValue * Number(strategy.baseWeight ?? 70);
+
+  let platformFit = 0.6;
+  const ep = event?.platform;
+  if (ep === "all") {
+    platformFit = 0.85;
+  } else if (Array.isArray(ep)) {
+    platformFit = ep.includes(p) ? 1.0 : 0.4;
+  } else if (typeof ep === "string") {
+    platformFit = ep === p ? 1.0 : 0.35;
+  }
+
+  const hourWeight = platformHourWeights?.[p]?.[h] ?? 0.55;
+
+  const tags = Array.isArray(event?.tags) ? event.tags : [];
+  let tagScore = 0;
+  for (const tag of tags) {
+    tagScore += Number(tagBoost?.[tag] || 0);
+  }
+
+  const platformPart = platformFit * Number(strategy.platformWeight ?? 15);
+  const hourPart = hourWeight * Number(strategy.hourWeight ?? 15);
+  const tagPart = tagScore * Number(strategy.tagWeight ?? 20);
+
+  const score = Math.round(clamp(base + platformPart + hourPart + tagPart, 0, 100));
+
+  const reasonTags = [];
+  const reasons = [];
+
+  if (weightValue >= 0.75) {
+    reasonTags.push("high_weight");
+    reasons.push("事件优先级高");
+  }
+
+  if (platformFit >= 0.95) {
+    reasonTags.push("platform_match");
+    reasons.push("平台匹配度高");
+  }
+
+  if (hourWeight >= 0.9) {
+    reasonTags.push("platform_peak");
+    reasons.push("命中平台高峰时段");
+  }
+
+  if (tags.includes("hot")) {
+    reasonTags.push("hot_tag");
+    reasons.push("包含热点标签");
+  }
+
+  if (tags.includes("urgent")) {
+    reasonTags.push("urgent_tag");
+    reasons.push("具备时效性");
+  }
+
+  if (!reasonTags.length) {
+    reasonTags.push("balanced_fit");
+    reasons.push("综合匹配度稳定");
+  }
+
+  return { score, reasonTags, reasons };
 }
 
 /**
@@ -159,39 +273,7 @@ export function normalizeEvent(raw, index = 0) {
  * @returns {number} 0~100
  */
 export function scoreSlot(event, platform, hour, options = {}) {
-  const p = String(platform || "").toLowerCase();
-  const h = clamp(Math.floor(Number(hour) || 0), 0, 23);
-
-  const platformHourWeights = options.platformHourWeights || DEFAULT_PLATFORM_HOUR_WEIGHTS;
-  const tagBoost = options.tagBoost || DEFAULT_TAG_BOOST;
-
-  // 1) 基础分：事件权重（占比最高）
-  const base = clamp(Number(event?.weight ?? 0.5), 0, 1) * 70;
-
-  // 2) 平台契合度：事件平台与目标平台是否匹配
-  let platformFit = 0.6;
-  const ep = event?.platform;
-  if (ep === "all") {
-    platformFit = 0.85;
-  } else if (Array.isArray(ep)) {
-    platformFit = ep.includes(p) ? 1.0 : 0.4;
-  } else if (typeof ep === "string") {
-    platformFit = ep === p ? 1.0 : 0.35;
-  }
-
-  // 3) 时段匹配：读取平台小时权重；未配置时给中性分
-  const hourWeight = platformHourWeights?.[p]?.[h] ?? 0.55;
-
-  // 4) 标签加成：hot / urgent 等可抬升，evergreen 可略降
-  const tags = Array.isArray(event?.tags) ? event.tags : [];
-  let tagScore = 0;
-  for (const tag of tags) {
-    tagScore += Number(tagBoost?.[tag] || 0);
-  }
-
-  // 综合得分：线性组合后限制到 0~100
-  const score = base + platformFit * 15 + hourWeight * 15 + tagScore * 20;
-  return Math.round(clamp(score, 0, 100));
+  return explainSlot(event, platform, hour, options).score;
 }
 
 /**
@@ -236,7 +318,7 @@ export function buildWeeklyPlan(events = [], options = {}) {
     for (const event of dayEvents) {
       for (const platform of platforms) {
         for (const hour of hours) {
-          const score = scoreSlot(event, platform, hour, options);
+          const { score, reasonTags, reasons } = explainSlot(event, platform, hour, options);
           dayCandidates.push({
             date: dayKey,
             platform,
@@ -245,6 +327,8 @@ export function buildWeeklyPlan(events = [], options = {}) {
             eventId: event.id,
             title: event.title,
             tags: event.tags,
+            reasonTags,
+            reasons,
           });
         }
       }
@@ -276,4 +360,5 @@ export default {
   normalizeEvent,
   scoreSlot,
   buildWeeklyPlan,
+  STRATEGY_PROFILES,
 };
