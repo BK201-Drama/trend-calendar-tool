@@ -67,3 +67,56 @@ describe('core: 评分 / 过滤 / 排序', () => {
     }
   });
 });
+
+describe('core: 策略相关', () => {
+  it('策略切换会影响推荐输出（保守 vs 激进）', () => {
+    const events = [
+      { id: 'safe', title: '高权重常规内容', platform: 'douyin', date: '2026-03-20', weight: 0.9, tags: [] },
+      { id: 'hot', title: '热点内容', platform: 'douyin', date: '2026-03-20', weight: 0.7, tags: ['hot'] },
+    ];
+
+    const conservativePlan = buildWeeklyPlan(events, {
+      startDate: '2026-03-20',
+      days: 1,
+      platforms: ['douyin'],
+      hours: [20],
+      limitPerDay: 1,
+      tagBoost: { hot: 0 },
+      platformHourWeights: { douyin: { 20: 1 } },
+    });
+
+    const aggressivePlan = buildWeeklyPlan(events, {
+      startDate: '2026-03-20',
+      days: 1,
+      platforms: ['douyin'],
+      hours: [20],
+      limitPerDay: 1,
+      tagBoost: { hot: 1 },
+      platformHourWeights: { douyin: { 20: 1 } },
+    });
+
+    expect(conservativePlan[0].eventId).toBe('safe');
+    expect(aggressivePlan[0].eventId).toBe('hot');
+  });
+
+  it('推荐结果包含可解释字段（score/tags）', () => {
+    const plan = buildWeeklyPlan(
+      [{ id: 'e-reason', title: '可解释性测试', platform: 'douyin', date: '2026-03-20', weight: 0.8, tags: ['hot'] }],
+      {
+        startDate: '2026-03-20',
+        days: 1,
+        platforms: ['douyin'],
+        hours: [20],
+        limitPerDay: 1,
+      },
+    );
+
+    expect(plan.length).toBeGreaterThan(0);
+    expect(plan[0]).toMatchObject({
+      eventId: 'e-reason',
+      score: expect.any(Number),
+      tags: expect.any(Array),
+    });
+    expect(plan[0].tags.length).toBeGreaterThan(0);
+  });
+});

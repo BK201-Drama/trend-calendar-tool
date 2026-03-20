@@ -99,6 +99,45 @@ describe('api: supertest', () => {
     expect(res.body.settings.limitPerDay).toBe(3);
   });
 
+  it('策略切换（通过 settings.hours）会影响计划建议时段', async () => {
+    await request(BASE_URL).put('/api/settings').send({
+      platforms: ['douyin'],
+      hours: [10],
+      limitPerDay: 1,
+    });
+    const morningPlan = await request(BASE_URL).get('/api/plan?days=2');
+    expect(morningPlan.status).toBe(200);
+
+    const morningItems = morningPlan.body.plan.flatMap((d) => d.items || []);
+    expect(morningItems.length).toBeGreaterThan(0);
+    expect(morningItems.every((x) => x.suggestedTime === '10:00')).toBe(true);
+
+    await request(BASE_URL).put('/api/settings').send({
+      platforms: ['douyin'],
+      hours: [20],
+      limitPerDay: 1,
+    });
+    const nightPlan = await request(BASE_URL).get('/api/plan?days=2');
+    const nightItems = nightPlan.body.plan.flatMap((d) => d.items || []);
+
+    expect(nightItems.length).toBeGreaterThan(0);
+    expect(nightItems.every((x) => x.suggestedTime === '20:00')).toBe(true);
+  });
+
+  it('GET /api/plan 推荐项包含可解释字段（score / eventId）', async () => {
+    const res = await request(BASE_URL).get('/api/plan?days=2');
+    expect(res.status).toBe(200);
+
+    const items = res.body.plan.flatMap((d) => d.items || []);
+    expect(items.length).toBeGreaterThan(0);
+
+    const first = items[0];
+    expect(first).toMatchObject({
+      score: expect.any(Number),
+      eventId: expect.any(String),
+    });
+  });
+
   it('GET /api/export?format=csv 返回可下载CSV', async () => {
     const res = await request(BASE_URL).get('/api/export?format=csv');
     expect(res.status).toBe(200);
