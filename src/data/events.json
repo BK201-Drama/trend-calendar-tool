@@ -1,0 +1,26 @@
+[
+  {
+    "id": "spring-campaign-1",
+    "title": "春季活动预热",
+    "platform": ["douyin", "xiaohongshu"],
+    "date": "2026-03-21",
+    "weight": 0.9,
+    "tags": ["hot", "campaign"]
+  },
+  {
+    "id": "feature-article-1",
+    "title": "产品功能深度解读",
+    "platform": "wechat",
+    "date": "2026-03-22",
+    "weight": 0.7,
+    "tags": ["evergreen"]
+  },
+  {
+    "id": "weekly-video-1",
+    "title": "周更视频栏目",
+    "platform": "bilibili",
+    "date": "2026-03-20",
+    "weight": 0.8,
+    "tags": ["hot"]
+  }
+]
