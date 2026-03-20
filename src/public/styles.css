@@ -1,90 +1,14 @@
-:root {
-  color-scheme: light;
-  --bg: #f7f8fa;
-  --card: #ffffff;
-  --text: #111827;
-  --muted: #6b7280;
-  --line: #e5e7eb;
-  --accent: #2563eb;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-}
-
-.container {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 24px 16px 40px;
-}
-
-.header h1 {
-  margin: 0;
-  font-size: 28px;
-}
-
-.header p {
-  margin: 8px 0 0;
-  color: var(--muted);
-}
-
-.board {
-  margin-top: 20px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.platform-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px;
-}
-
-.platform-title {
-  margin: 0 0 10px;
-  font-size: 18px;
-  color: var(--accent);
-}
-
-.plan-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 10px;
-}
-
-.plan-item {
-  border-top: 1px dashed var(--line);
-  padding-top: 8px;
-}
-
-.plan-item:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.plan-date {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.plan-topic {
-  margin-top: 4px;
-  font-weight: 500;
-}
-
-.plan-time {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--muted);
-}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f6f7fb; color: #1f2430; }
+.container { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+.sub { color: #6b7280; margin-top: -6px; }
+.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+input, select, textarea, button, .btn { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+button, .btn { background: #111827; color: #fff; text-decoration: none; cursor: pointer; }
+textarea { width: 100%; box-sizing: border-box; margin: 8px 0; }
+.board { display: grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap: 10px; }
+.platform-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; background: #fafafa; }
+.platform-card h3 { margin: 0 0 8px 0; }
+.platform-card ul { margin: 0; padding-left: 18px; }
+.platform-card li { margin: 6px 0; }
+.score { color: #6b7280; }

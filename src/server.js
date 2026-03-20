@@ -140,6 +140,37 @@ app.post('/api/hotspots', (req, res) => {
   res.status(201).json({ createdCount: created.length, events: created });
 });
 
+app.get('/api/export', (req, res) => {
+  const format = String(req.query.format || 'csv').toLowerCase();
+  const days = Number(req.query.days) > 0 ? Number(req.query.days) : 7;
+  const userSettings = getSetting('plan_settings', DEFAULT_SETTINGS) || DEFAULT_SETTINGS;
+  const settings = { ...DEFAULT_SETTINGS, ...userSettings };
+  const suggestions = buildWeeklyPlan(listEvents(), {
+    days,
+    platforms: settings.platforms,
+    hours: settings.hours,
+    limitPerDay: settings.limitPerDay,
+  });
+
+  if (format === 'md') {
+    const lines = ['# 发布计划', '', `生成时间: ${new Date().toISOString()}`, ''];
+    lines.push('| 日期 | 平台 | 时间 | 选题 | 分数 |');
+    lines.push('|---|---|---|---|---|');
+    for (const s of suggestions) {
+      lines.push(`| ${s.date} | ${toDisplayPlatform(s.platform)} | ${String(s.hour).padStart(2, '0')}:00 | ${s.title} | ${s.score} |`);
+    }
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    return res.send(lines.join('\n'));
+  }
+
+  const header = 'date,platform,time,title,score\n';
+  const rows = suggestions
+    .map((s) => `${s.date},${toDisplayPlatform(s.platform)},${String(s.hour).padStart(2, '0')}:00,"${String(s.title).replace(/"/g, '""')}",${s.score}`)
+    .join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  return res.send(header + rows + (rows ? '\n' : ''));
+});
+
 app.get('/{*any}', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

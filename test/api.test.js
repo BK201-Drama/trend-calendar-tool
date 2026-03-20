@@ -74,7 +74,7 @@ describe('api: supertest', () => {
   it('POST /api/events 创建成功并可在列表中查到', async () => {
     const payload = {
       title: 'QA 新建事件',
-      platform: '抖音',
+      platform: 'douyin',
       date: '2026-03-21',
       time: '20:30',
       status: 'planned',
@@ -87,5 +87,22 @@ describe('api: supertest', () => {
     const listRes = await request(BASE_URL).get('/api/events');
     const found = listRes.body.events.find((e) => e.title === payload.title && e.date === payload.date);
     expect(found).toBeTruthy();
+  });
+
+  it('PUT /api/settings 可更新时段配置', async () => {
+    const res = await request(BASE_URL).put('/api/settings').send({
+      hours: [9, 13, 21],
+      limitPerDay: 3,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.settings.hours).toEqual([9, 13, 21]);
+    expect(res.body.settings.limitPerDay).toBe(3);
+  });
+
+  it('GET /api/export?format=csv 返回可下载CSV', async () => {
+    const res = await request(BASE_URL).get('/api/export?format=csv');
+    expect(res.status).toBe(200);
+    expect(String(res.headers['content-type'])).toContain('text/csv');
+    expect(res.text.startsWith('date,platform,time,title,score')).toBe(true);
   });
 });

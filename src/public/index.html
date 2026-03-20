@@ -8,14 +8,50 @@
   </head>
   <body>
     <main class="container">
-      <header class="header">
-        <h1>7天发布计划</h1>
-        <p>按平台分组展示，快速查看内容安排。</p>
-      </header>
+      <h1>Trend Calendar Tool</h1>
+      <p class="sub">低成本热点日历 + 发布排程</p>
 
-      <section id="board" class="board"></section>
+      <section class="panel">
+        <h2>排程设置</h2>
+        <div class="row">
+          <label>每天条数</label>
+          <input id="limitPerDay" type="number" min="1" value="4" />
+          <label>时段(逗号)</label>
+          <input id="hours" value="10,12,18,20" />
+          <button id="saveSettings">保存设置</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>热点导入</h2>
+        <div class="row">
+          <label>平台</label>
+          <select id="hotspotPlatform">
+            <option value="douyin">抖音</option>
+            <option value="xiaohongshu">小红书</option>
+            <option value="bilibili">B站</option>
+            <option value="wechat">视频号</option>
+          </select>
+          <label>热点(每行一个)</label>
+        </div>
+        <textarea id="hotspots" rows="4" placeholder="春季护肤\n露营穿搭\n打工人早餐"></textarea>
+        <button id="importHotspots">导入热点</button>
+      </section>
+
+      <section class="panel">
+        <h2>导出</h2>
+        <div class="row">
+          <a class="btn" href="/api/export?format=csv" target="_blank">导出 CSV</a>
+          <a class="btn" href="/api/export?format=md" target="_blank">导出 Markdown</a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>发布建议（按平台）</h2>
+        <div id="board" class="board"></div>
+      </section>
     </main>
 
-    <script src="/app.js" type="module"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>
