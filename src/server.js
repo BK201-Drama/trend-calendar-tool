@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { buildWeeklyPlan } from './core.js';
+import { createEvent, listEvents } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,89 +13,73 @@ const __dirname = path.dirname(__filename);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const platforms = ['抖音', '小红书', 'B站', '视频号'];
+function toDisplayPlatform(platform) {
+  const map = {
+    douyin: '抖音',
+    xiaohongshu: '小红书',
+    bilibili: 'B站',
+    wechat: '视频号',
+  };
+  return map[String(platform).toLowerCase()] || platform;
+}
 
-const events = [
-  {
-    id: 1,
-    title: '春季护肤清单短视频',
-    platform: '抖音',
-    date: new Date().toISOString().slice(0, 10),
-    time: '20:00',
-    status: 'planned',
-  },
-  {
-    id: 2,
-    title: '本周通勤穿搭图文',
-    platform: '小红书',
-    date: new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10),
-    time: '12:30',
-    status: 'planned',
-  },
-];
-
-let nextId = 3;
-
-function buildPlan(days = 7) {
-  const today = new Date();
-  const plan = [];
-
+function formatPlan(days, suggestions) {
+  const byDay = new Map();
   for (let i = 0; i < days; i += 1) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const date = d.toISOString().slice(0, 10);
-
-    const items = platforms.map((platform, idx) => ({
-      platform,
-      topic: `${platform} 选题 #${i + 1}`,
-      suggestedTime: ['10:00', '12:30', '18:00', '20:00'][idx % 4],
-      date,
-    }));
-
-    plan.push({
-      date,
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    byDay.set(key, {
+      date: key,
       weekday: d.toLocaleDateString('zh-CN', { weekday: 'short' }),
-      items,
+      items: [],
     });
   }
 
-  return plan;
+  for (const s of suggestions) {
+    if (!byDay.has(s.date)) continue;
+    byDay.get(s.date).items.push({
+      platform: toDisplayPlatform(s.platform),
+      topic: s.title,
+      suggestedTime: `${String(s.hour).padStart(2, '0')}:00`,
+      date: s.date,
+      score: s.score,
+      eventId: s.eventId,
+    });
+  }
+
+  for (const v of byDay.values()) {
+    v.items.sort((a, b) => b.score - a.score || a.suggestedTime.localeCompare(b.suggestedTime));
+  }
+
+  return Array.from(byDay.values());
 }
 
-app.get('/api/plan', (_req, res) => {
+app.get('/api/plan', (req, res) => {
+  const days = Number(req.query.days) > 0 ? Number(req.query.days) : 7;
+  const events = listEvents();
+  const suggestions = buildWeeklyPlan(events, { days });
+
   res.json({
-    days: 7,
+    days,
     generatedAt: new Date().toISOString(),
-    plan: buildPlan(7),
+    plan: formatPlan(days, suggestions),
   });
 });
 
 app.get('/api/events', (_req, res) => {
-  res.json({ events });
+  res.json({ events: listEvents() });
 });
 
 app.post('/api/events', (req, res) => {
-  const { title, platform, date, time = '', status = 'planned' } = req.body || {};
-
+  const { title, platform, date } = req.body || {};
   if (!title || !platform || !date) {
-    return res.status(400).json({
-      error: 'title, platform, date 为必填字段',
-    });
+    return res.status(400).json({ error: 'title, platform, date 为必填字段' });
   }
 
-  const event = {
-    id: nextId,
-    title,
-    platform,
-    date,
-    time,
-    status,
-  };
-
-  nextId += 1;
-  events.push(event);
-
-  return res.status(201).json({ event });
+  const normalizedPlatform = String(platform).toLowerCase();
+  const event = createEvent({ ...req.body, platform: normalizedPlatform });
+  return res.status(201).json({ event: { ...event, tags: event.tags ? JSON.parse(event.tags) : [] } });
 });
 
 app.get('/{*any}', (_req, res) => {
